@@ -21,7 +21,7 @@ export interface Brand {
 // ─── Agent ────────────────────────────────────────────────────────────────────
 export type ChannelType = 'whatsapp' | 'webchat' | 'voice';
 export type AgentStatus = 'draft' | 'testing' | 'active' | 'paused';
-export type ModuleView = 'agents' | 'flow' | 'whatsapp' | 'prompts' | 'monitor' | 'test';
+export type ModuleView = 'agents' | 'flow' | 'whatsapp' | 'prompts' | 'monitor' | 'test' | 'blueprints';
 
 export interface WhatsAppConfig {
   phoneNumberId: string;

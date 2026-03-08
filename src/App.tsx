@@ -9,6 +9,7 @@ import { WhatsAppIntegration } from './modules/WhatsAppIntegration';
 import { PromptManager } from './modules/PromptManager';
 import { ConversationMonitor } from './modules/ConversationMonitor';
 import { TestMode } from './modules/TestMode';
+import { BlueprintLibrary } from './modules/BlueprintLibrary';
 import type { ModuleView } from './core/types';
 
 const NAV_ITEMS: { id: ModuleView; label: string; icon: string; description: string }[] = [
@@ -18,6 +19,7 @@ const NAV_ITEMS: { id: ModuleView; label: string; icon: string; description: str
   { id: 'whatsapp', label: 'WhatsApp', icon: '💬', description: 'Meta Cloud API' },
   { id: 'monitor', label: 'Monitor', icon: '📊', description: 'Conversaciones en vivo' },
   { id: 'test', label: 'Test Mode', icon: '🧪', description: 'Simular agente' },
+  { id: 'blueprints', label: 'Blueprint Library', icon: '🗂', description: 'Gestionar y asignar BPs' },
 ];
 
 export function App() {
@@ -223,6 +225,7 @@ export function App() {
             {activeModule === 'whatsapp' && <WhatsAppIntegration />}
             {activeModule === 'monitor' && <ConversationMonitor />}
             {activeModule === 'test' && <TestMode />}
+            {activeModule === 'blueprints' && <BlueprintLibrary />}
           </motion.div>
         </AnimatePresence>
       </main>

@@ -18,18 +18,37 @@ import {
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function inferTypeFromJSON(data: Record<string, unknown>): BPType | null {
-  // Detecta el tipo por campos clave del schema
-  if (data.schema === 'BP_PERSON' || data.voicelab || data.persona) return 'BP_PERSON';
-  if (data.schema === 'BP_LOCATION' || data.location || data.scene) return 'BP_LOCATION';
-  if (data.schema === 'BP_PRODUCT' || data.compliance_risk || data.imagelab) return 'BP_PRODUCT';
+  // schema_version es el campo canónico: "BP_PERSON_1.0", "BP_PRODUCT_1.0", "BP_LOCATION_1.0"
+  const sv = (data.schema_version as string) || '';
+  if (sv.startsWith('BP_PERSON') || data.voicelab || data.humanize) return 'BP_PERSON';
+  if (sv.startsWith('BP_LOCATION') || data.location || data.scene) return 'BP_LOCATION';
+  if (sv.startsWith('BP_PRODUCT') || data.compliance_flags || data.sku) return 'BP_PRODUCT';
+  // Fallback legacy
+  if (data.schema === 'BP_PERSON' || data.persona) return 'BP_PERSON';
+  if (data.schema === 'BP_LOCATION') return 'BP_LOCATION';
+  if (data.schema === 'BP_PRODUCT' || data.imagelab) return 'BP_PRODUCT';
   return null;
 }
 
 function extractMeta(data: Record<string, unknown>): { name: string; brandId: string; version: string } {
+  // Orden de prioridad para nombre según tipo de BP
+  const name =
+    (data.displayName as string)       // BP_PERSON: "Patricia Osorio — Vizos Salón Miami"
+    || (data.display_name as string)   // BP_PRODUCT: "DY Fazza"
+    || (data.location_name as string)  // BP_LOCATION
+    || (data.name as string)           // legacy
+    || (data.id as string)             // último fallback: id del BP
+    || 'Sin nombre';
+
+  // Extraer versión desde schema_version "BP_PERSON_1.0" o campo version directo
+  const sv = (data.schema_version as string) || '';
+  const versionFromSchema = sv.split('_').pop() || '';
+  const version = (data.version as string) || versionFromSchema || '1.0';
+
   return {
-    name: (data.name as string) || (data.product_name as string) || (data.persona_name as string) || 'Sin nombre',
+    name,
     brandId: (data.brandId as string) || (data.brand_id as string) || 'unknown',
-    version: (data.version as string) || '1.0',
+    version,
   };
 }
 
@@ -211,7 +230,7 @@ export const useBlueprintStore = create<BlueprintState & BlueprintActions>((set,
         : slotId === 'L' ? 'LOCACIÓN / ESCENA'
         : `REFERENCIA DE ESTILO ${slotId}`;
 
-      return `[${label} — ${bp.type} v${bp.version}]\n${JSON.stringify(bp.data, null, 2)}`;
+      return `[${label} — ${bp.name} | ${bp.type} v${bp.version} | brand: ${bp.brandId}]\n${JSON.stringify(bp.data, null, 2)}`;
     });
 
     return `\n\n=== BLUEPRINTS ACTIVOS ===\n${parts.join('\n\n---\n\n')}\n=== FIN BLUEPRINTS ===\n`;

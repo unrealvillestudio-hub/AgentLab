@@ -12,8 +12,7 @@ import { TestMode } from './modules/TestMode';
 import { BlueprintLibrary } from './modules/BlueprintLibrary';
 import { BlueprintDrawer, BlueprintTriggerButton } from './components/BlueprintDrawer';
 import type { ModuleView } from './core/types';
-
-const BUILD_TAG = 'AL v1.2';
+import { BUILD_TAG } from './config/buildTag';
 
 const NAV_ITEMS: { id: ModuleView; label: string; icon: string; description: string }[] = [
   { id: 'agents', label: 'Agentes', icon: '🤖', description: 'Crear y gestionar agentes' },

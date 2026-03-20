@@ -1,9 +1,38 @@
-# UNRLVL AgentLab
+# UNRLVL AgentLab — Unreal>ille Studio
 
-Suite de herramientas de producción AI para el ecosistema UNRLVL Studio.
-Aplicación React/TypeScript desplegada en Vercel.
+Suite orquestadora de Labs AI del ecosistema Unreal>ille Studio.
+App React/TypeScript con todos los Labs integrados localmente.
 
 **Live:** [https://unrlvl-agent-lab.vercel.app](https://unrlvl-agent-lab.vercel.app)
+**Contexto completo del ecosistema:** [`CoreProject/CONTEXT.md`](https://github.com/unrealvillestudio-hub/CoreProject/blob/main/CONTEXT.md)
+
+---
+
+## Rol en el ecosistema
+
+AgentLab es la vista consolidada del ecosistema — todos los Labs en una sola app. Mientras cada Lab vive en AI Studio de forma independiente, AgentLab los orquesta localmente y sirve como entorno de pruebas para flujos multi-Lab. Es también donde vive el Orchestrator (planner de flujos).
+
+```
+AgentLab (orquestador local)
+├── WebLab
+├── BlogLab
+├── CopyLab
+├── SocialLab
+├── VideoLab
+├── ImageLab (en desarrollo)
+├── VoiceLab (en desarrollo)
+├── BlueprintLab
+└── Orchestrator (planner multi-Lab)
+```
+
+---
+
+## Stack
+
+- React 18 + TypeScript + Vite + Tailwind
+- AI: Gemini 2.0 Flash (Gemini API)
+- State: Zustand
+- Deploy: Vercel
 
 ---
 
@@ -11,42 +40,28 @@ Aplicación React/TypeScript desplegada en Vercel.
 
 | Lab | Descripción | Estado |
 |-----|-------------|--------|
-| **WebLab** | Generador de copy web — Markdown / HTML / Liquid | ✅ v2.0 |
-| **BlogLab** | Generador de posts (Educativo / SEO / Producto / UGC) | ✅ v1.0 |
-| **CopyLab** | Copy para ads, emails, captions | ✅ v1.1 |
-| **SocialLab** | Copy + scheduling para redes sociales | ✅ v1.1 |
-| **VideoLab** | Storyboards y guiones visuales | ✅ v1.1 |
-| **ImageLab** | Generación de prompts para imagen | 🟡 En desarrollo |
-| **VoiceLab** | Scripts y audio | 🟡 En desarrollo |
-| **BlueprintLab** | PersonBlueprints + LocationBlueprints | ✅ v1.0 |
-| **Orchestrator** | Planner de flujos multi-Lab | ✅ v1.1 |
-
----
-
-## Stack
-
-- **Framework:** React 18 + TypeScript
-- **State:** Zustand
-- **AI:** Gemini 2.0 Flash (Gemini API)
-- **Build:** Vite
-- **Deploy:** Vercel
-- **Estilos:** Tailwind CSS
+| WebLab | Generador web HTML/Liquid | ✅ v2.6 |
+| BlogLab | Posts educativo/SEO/producto/UGC | ✅ v1.0 |
+| CopyLab | Ads, emails, captions | ✅ v1.1 |
+| SocialLab | Copy + scheduling redes sociales | ✅ v1.1 |
+| VideoLab | Storyboards y guiones | ✅ v1.1 |
+| ImageLab | Prompt packs para imagen | 🟡 En desarrollo |
+| VoiceLab | Scripts de voz y audio | 🟡 En desarrollo |
+| BlueprintLab | Creación y validación de BPs | ✅ v1.2 |
+| Orchestrator | Planner de flujos multi-Lab | ✅ v1.1 |
 
 ---
 
 ## Capas transversales
 
 ### Humanize Layer (F2.5)
-Capa de autenticidad inyectada en todos los engines. Todo output del ecosistema
-debe sentirse hecho por humanos para humanos.
-
+Todo output del ecosistema debe sentirse hecho por humanos para humanos.
 - **Fuente:** `src/config/humanizeConfig.ts`
 - **Fallback chain:** `BP_PERSON.humanize.[medio]` → `BRAND_HUMANIZE_OVERRIDES[brandId]` → `HUMANIZE_DEFAULTS`
-- **DB_VARIABLES:** pestaña HUMANIZE en `DB_VARIABLES_v6_4.xlsx`
 
 ### DB_VARIABLES
-Fuente de verdad para datos de marca, personas, contextos y CTAs.
-Versión actual: **v6.4**
+Fuente de verdad para tokens de marca, personas, contextos y CTAs.
+Versión actual: **v6.4** — `CoreProject/DB_VARIABLES_v6.xlsx`
 
 ---
 
@@ -56,10 +71,20 @@ Versión actual: **v6.4**
 |----|-------|---------|
 | `neuroneCosmetics` | Neurone Cosmética | Miami B2C + B2B profesional |
 | `patriciaOsorioVizosSalon` | Vizos Salón | Miami / South Dade |
+| `vizosCosmetics` | Vizos Cosmetics | Miami |
 | `diamondDetails` | Diamond Details | Miami auto detailing |
 | `d7Herbal` | D7Herbal | Miami / exportación |
-| `vizosCosmetics` | Vizos Cosmetics | Miami |
-| + 5 más | — | — |
+| `forumPhs` | ForumPHs | Panamá — Admin. Propiedad Horizontal |
+
+---
+
+## Dependencias
+
+| Consume | Provee |
+|---------|--------|
+| BluePrints (todos los BP schemas) | Orquestación de flujos |
+| DB_VARIABLES_v6 | Entorno integrado de todos los Labs |
+| CoreProject/CONTEXT.md | — |
 
 ---
 
@@ -67,19 +92,16 @@ Versión actual: **v6.4**
 
 ```bash
 npm install
-cp .env.example .env.local   # añade VITE_GEMINI_API_KEY
+cp .env.example .env.local  # añade VITE_GEMINI_API_KEY
 npm run dev
 ```
 
 ---
 
-## Repositorios del ecosistema
+## Changelog
 
-| Repo | Descripción |
-|------|-------------|
-| [UNRLVL-AgentLab](https://github.com/unrealvillestudio-hub/UNRLVL-AgentLab) | Este repo — app suite |
-| [UNRLVL-Shopify](https://github.com/unrealvillestudio-hub/UNRLVL-Shopify) | Custodia de assets web (Liquid / HTML / MD) |
-
----
-
-*UNRLVL Studio — Miami, FL*
+| Fecha | Cambio |
+|---|---|
+| 2026-03-20 | README actualizado · ForumPHs añadido a marcas activas |
+| — | Orchestrator v1.1 |
+| — | Suite completa con 9 Labs |

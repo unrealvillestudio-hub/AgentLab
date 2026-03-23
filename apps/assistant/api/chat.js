@@ -133,11 +133,20 @@ function validateToken(token) {
     if (parts.length < 3) continue
     if (parts[0].trim().toUpperCase() !== token.toUpperCase()) continue
 
+    // Mapa de etiquetas personalizadas → roles internos (admin|po|ops)
+    // Sam puede usar cualquier etiqueta — se normaliza internamente
+    const ROLE_MAP = {
+      admin:'admin', sam:'admin', samdev:'admin', unrlvl:'admin',
+      po:'po', paty:'po', patricia:'po', owner:'po',
+      ops:'ops', laura:'ops', operaciones:'ops', equipo:'ops'
+    }
+
     let clientName, role, expiresAtStr
-    if (parts.length >= 4 && ['admin','po','ops'].includes(parts[2].trim().toLowerCase())) {
-      clientName   = parts[1].trim()
-      role         = parts[2].trim().toLowerCase()
-      expiresAtStr = parts[3].trim()
+    if (parts.length >= 4) {
+      clientName    = parts[1].trim()
+      const rawRole = parts[2].trim().toLowerCase()
+      role          = ROLE_MAP[rawRole] || 'ops'
+      expiresAtStr  = parts[3].trim()
     } else {
       clientName   = parts[1].trim()
       role         = 'ops'

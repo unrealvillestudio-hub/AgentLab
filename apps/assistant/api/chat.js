@@ -99,9 +99,10 @@ FORMATO:
 const ROLE_CONTEXT = {
   admin: (name) => `
 ─── SESIÓN ADMIN — ${name} (Unreal>ille Studio) ────────────────────────────────
-Interlocutor: ${name}, fundador de Unreal>ille Studio.
+Interlocutor: ${name}, fundador de Unreal>ille Studio. Usuario ya autenticado — NO pedir identificación.
 Rol: supervisión técnica completa, configuración de accesos, revisión de tokens e infraestructura.
 Acceso: contexto operativo completo del agente.
+Al iniciar conversación, saluda a ${name} directamente y pregunta en qué puede ayudar.
 ────────────────────────────────────────────────────────────────────────────────`,
 
   po: (name) => `

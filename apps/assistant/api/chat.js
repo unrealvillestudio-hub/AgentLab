@@ -210,84 +210,96 @@ function validateToken(token) {
 }
 
 // ─── KV STORAGE ───────────────────────────────────────────────────────────────
-// Importación dinámica para no romper si KV_REST_API_URL no está configurado
 let kv = null
-try {
-  kv = require('@vercel/kv').kv
-} catch (e) {
+try { kv = require('@vercel/kv').kv } catch (e) {
   console.warn('KV no disponible — historial no persistirá entre sesiones')
 }
 
-const KV_MAX_MESSAGES    = 30  // umbral para comprimir
-const KV_KEEP_AFTER_COMPRESS = 5  // mensajes recientes a conservar tras comprimir
-const KV_TTL_SECONDS     = 60 * 60 * 24 * 90  // 90 días de TTL
+const KV_MAX_MESSAGES        = 30
+const KV_KEEP_AFTER_COMPRESS = 5
+const KV_TTL_SECONDS         = 60 * 60 * 24 * 90  // 90 días
+const AGENT_LOG_KEY          = 'agent_log:SOCIAL-MEDIA-AGENT'
+const NUDGE_EVERY_N_MSGS     = 10  // recordar actualizar cada N mensajes del usuario
 
+// ── Historial de chat por usuario ─────────────────────────────────────────────
 async function loadHistory(tokenKey) {
   if (!kv) return []
   try {
     const raw = await kv.get(`chat:${tokenKey}`)
     return raw ? JSON.parse(raw) : []
-  } catch (e) {
-    console.error('KV load error:', e)
-    return []
-  }
+  } catch (e) { console.error('KV load error:', e); return [] }
 }
 
 async function saveHistory(tokenKey, history, apiKey) {
   if (!kv) return
   try {
     let toSave = history
-    // ── Protocolo de compresión ──────────────────────────────────────────────
     if (history.length > KV_MAX_MESSAGES) {
-      const older   = history.slice(0, history.length - KV_KEEP_AFTER_COMPRESS)
-      const recent  = history.slice(-KV_KEEP_AFTER_COMPRESS)
-
-      // Generar resumen estructurado via Claude
+      const older  = history.slice(0, history.length - KV_KEEP_AFTER_COMPRESS)
+      const recent = history.slice(-KV_KEEP_AFTER_COMPRESS)
       const summaryRes = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': apiKey,
-          'anthropic-version': '2023-06-01'
-        },
+        headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
         body: JSON.stringify({
-          model: 'claude-sonnet-4-20250514',
-          max_tokens: 512,
+          model: 'claude-sonnet-4-20250514', max_tokens: 512,
           system: 'Eres un asistente que genera resúmenes de sesión. Responde SOLO con el resumen estructurado, sin texto adicional.',
-          messages: [{
-            role: 'user',
-            content: `Resume esta conversación en formato estructurado para retomar el trabajo:
-
-${older.map(m => `${m.role === 'user' ? 'Usuario' : 'Asistente'}: ${m.content}`).join('\n')}
-
-Usa exactamente este formato:
-RESUMEN DE SESIÓN — [fecha de hoy]
-Contexto: [qué se estaba construyendo/configurando]
-Completado: ✅ [lista de lo que está listo]
-En curso: ⏳ [lo que quedó a medias]
-Pendiente: ❌ [lo que no se ha iniciado]
-Decisiones tomadas: [decisiones importantes]
-Próximo paso: [acción concreta inmediata]`
-          }]
+          messages: [{ role: 'user', content: `Resume esta conversación en formato estructurado para retomar el trabajo:\n\n${older.map(m => `${m.role === 'user' ? 'Usuario' : 'Asistente'}: ${m.content}`).join('\n')}\n\nUsa exactamente este formato:\nRESUMEN DE SESIÓN — [fecha de hoy]\nContexto: [qué se estaba construyendo/configurando]\nCompletado: ✅ [lista de lo que está listo]\nEn curso: ⏳ [lo que quedó a medias]\nPendiente: ❌ [lo que no se ha iniciado]\nDecisiones tomadas: [decisiones importantes]\nPróximo paso: [acción concreta inmediata]` }]
         })
       })
-
       if (summaryRes.ok) {
-        const summaryData = await summaryRes.json()
-        const summaryText = (summaryData.content || []).find(b => b.type === 'text')?.text || ''
-        const summaryMsg = {
-          role: 'assistant',
-          content: `📋 **Resumen de sesión anterior:**\n\n${summaryText}\n\n---\n*[Historial comprimido — continuando desde aquí]*`,
-          _is_summary: true
-        }
-        toSave = [summaryMsg, ...recent]
+        const sd = await summaryRes.json()
+        const summaryText = (sd.content || []).find(b => b.type === 'text')?.text || ''
+        toSave = [{ role: 'assistant', content: `📋 **Resumen de sesión anterior:**\n\n${summaryText}\n\n---\n*[Historial comprimido]*`, _is_summary: true }, ...recent]
       }
     }
-    // ────────────────────────────────────────────────────────────────────────
     await kv.set(`chat:${tokenKey}`, JSON.stringify(toSave), { ex: KV_TTL_SECONDS })
-  } catch (e) {
-    console.error('KV save error:', e)
-  }
+  } catch (e) { console.error('KV save error:', e) }
+}
+
+// ── Agent log (separado del historial de chat) ────────────────────────────────
+async function saveAgentLog(logContent) {
+  if (!kv) return
+  try {
+    await kv.set(AGENT_LOG_KEY, logContent, { ex: KV_TTL_SECONDS })
+  } catch (e) { console.error('KV agent_log save error:', e) }
+}
+
+async function generateAgentLog(messages, clientName, apiKey) {
+  const today = new Date().toISOString().split('T')[0]
+  const conversation = messages
+    .filter(m => !m._is_summary)
+    .map(m => `${m.role === 'user' ? 'Usuario' : 'Asistente'}: ${m.content}`)
+    .join('\n')
+
+  const res = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
+    body: JSON.stringify({
+      model: 'claude-sonnet-4-20250514', max_tokens: 700,
+      system: 'Eres un asistente que genera logs de progreso estructurados. Responde SOLO con el log en markdown, sin texto adicional.',
+      messages: [{ role: 'user', content: `Genera un log de progreso de infraestructura digital basado en esta conversación. Usuario: ${clientName}. Fecha: ${today}.\n\n${conversation}\n\nUsa EXACTAMENTE este formato markdown:\n\n## PROGRESO INFRAESTRUCTURA DIGITAL — ${clientName} — ${today}\n\n**Completado:** \n- ✅ [item] o *ninguno*\n\n**En curso:** \n- ⏳ [item] o *ninguno*\n\n**Pendiente:** \n- ❌ [item] o *ninguno*\n\n**Decisiones tomadas:**\n- [decisión] o *ninguna*\n\n**Próximo paso concreto:** [acción específica]\n\n---\n*Generado por Social Media Agent · ${today}*` }]
+    })
+  })
+  if (!res.ok) return null
+  const data = await res.json()
+  return (data.content || []).find(b => b.type === 'text')?.text || null
+}
+
+// ── Session log dinámico desde unrlvl-context ─────────────────────────────────
+async function fetchBrandSessionLog() {
+  try {
+    const res = await fetch('https://unrlvl-context.vercel.app/brands/NeuroneSCF/session_log.md', {
+      signal: AbortSignal.timeout(3000)  // no bloquear si falla
+    })
+    if (!res.ok) return ''
+    return await res.text()
+  } catch (e) { return '' }
+}
+
+// ── Nudge: ¿debe recordarle que actualice? ────────────────────────────────────
+function shouldNudge(messages) {
+  const userMsgs = messages.filter(m => m.role === 'user' && !m._is_summary)
+  return userMsgs.length > 0 && userMsgs.length % NUDGE_EVERY_N_MSGS === 0
 }
 
 // ─── HANDLER ──────────────────────────────────────────────────────────────────
@@ -295,7 +307,6 @@ module.exports = async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*')
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS')
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
-
   if (req.method === 'OPTIONS') return res.status(200).end()
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
 
@@ -308,34 +319,53 @@ module.exports = async function handler(req, res) {
   const apiKey = process.env.ANTHROPIC_API_KEY
   if (!apiKey) return res.status(500).json({ error: 'API key no configurada' })
 
-  // Sólo la verificación de acceso (messages vacío) no persiste
   const isAccessCheck = messages.length === 1 && messages[0].content === 'verificar acceso'
 
+  // ── Detectar comando "actualiza" ─────────────────────────────────────────────
+  const lastMsg = messages[messages.length - 1]
+  const isUpdateCommand = lastMsg?.role === 'user' &&
+    lastMsg.content.trim().toLowerCase() === 'actualiza'
+
+  if (isUpdateCommand && !isAccessCheck) {
+    const kvHistory = await loadHistory(token.toUpperCase())
+    const allMessages = kvHistory.length > messages.length ? kvHistory : messages
+    const logContent = await generateAgentLog(allMessages, validation.clientName, apiKey)
+
+    if (logContent) {
+      await saveAgentLog(logContent)
+      const reply = `✅ **Progreso guardado.**\n\nHe generado y guardado el log de esta sesión. Sam lo descargará la próxima vez que actualice el sistema de contexto.\n\n${logContent}\n\n---\nPuedes cerrar cuando quieras. La próxima sesión arranca desde aquí.`
+      const fullHistory = [...(kvHistory.length > messages.length ? kvHistory : messages), { role: 'assistant', content: reply }]
+      await saveHistory(token.toUpperCase(), fullHistory, apiKey)
+      return res.status(200).json({ reply, clientName: validation.clientName })
+    } else {
+      return res.status(200).json({ reply: 'No pude generar el log en este momento. Intenta de nuevo.', clientName: validation.clientName })
+    }
+  }
+
   try {
-    // Construir contexto: historial KV + mensajes nuevos del cliente
+    // ── Construir contexto completo ──────────────────────────────────────────
     let contextMessages = messages
     if (!isAccessCheck) {
       const kvHistory = await loadHistory(token.toUpperCase())
-      // Evitar duplicar: si el frontend ya envía los mensajes previos, usar solo los nuevos
-      // El frontend envía el historial completo de la sesión activa — usar solo eso + KV como base
       if (kvHistory.length > 0 && messages.length <= kvHistory.length) {
-        // El frontend tiene menos mensajes que KV → probablemente sesión nueva que no cargó historial
         contextMessages = [...kvHistory, ...messages]
       }
     }
 
+    // ── System prompt dinámico: base + session_log de NeuroneSCF ─────────────
+    const brandLog = isAccessCheck ? '' : await fetchBrandSessionLog()
+    const dynamicSystem = brandLog
+      ? `${SYSTEM_PROMPT}\n\n─── ESTADO ACTUAL DEL PROYECTO (actualizado) ───────────────────────────────\n${brandLog}\n────────────────────────────────────────────────────────────────────────────`
+      : SYSTEM_PROMPT
+
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01'
-      },
+      headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
       body: JSON.stringify({
         model: 'claude-sonnet-4-20250514',
         max_tokens: 1024,
-        system: SYSTEM_PROMPT,
-        messages: contextMessages.slice(-24)  // últimos 24 para no saturar
+        system: dynamicSystem,
+        messages: contextMessages.slice(-24)
       })
     })
 
@@ -346,9 +376,13 @@ module.exports = async function handler(req, res) {
     }
 
     const data = await response.json()
-    const text = (data.content || []).find(b => b.type === 'text')?.text || ''
+    let text = (data.content || []).find(b => b.type === 'text')?.text || ''
 
-    // Persistir el historial completo (con la respuesta del asistente)
+    // ── Nudge automático cada N mensajes de usuario ──────────────────────────
+    if (!isAccessCheck && shouldNudge(contextMessages)) {
+      text += `\n\n---\n⚡ **${validation.clientName} — deberías pensar ya en actualizar.** Escribe la palabra **Actualiza** para guardar el progreso. Si no lo haces, la próxima sesión empieza desde cero.`
+    }
+
     if (!isAccessCheck) {
       const fullHistory = [...contextMessages, { role: 'assistant', content: text }]
       await saveHistory(token.toUpperCase(), fullHistory, apiKey)

@@ -1,17 +1,34 @@
 const { kv } = require('@vercel/kv')
 
-// ─── TOKEN VALIDATION (duplicada de chat.js — misma lógica) ───────────────────
+// ─── TOKEN VALIDATION — misma lógica que chat.js ──────────────────────────────
+const ROLE_MAP = {
+  admin:'admin', sam:'admin', samdev:'admin', unrlvl:'admin',
+  po:'po', paty:'po', patricia:'po', owner:'po',
+  ops:'ops', laura:'ops', operaciones:'ops', equipo:'ops'
+}
+
 function validateToken(token) {
   const raw = process.env.ACCESS_TOKENS || ''
   if (!raw) return { valid: false }
   for (const entry of raw.split(',').map(e => e.trim()).filter(Boolean)) {
     const parts = entry.split(':')
     if (parts.length < 3) continue
-    const [code, clientName, expiresAt] = parts
-    if (code.trim().toUpperCase() !== token.toUpperCase()) continue
-    const expiry = new Date(expiresAt.trim())
+    if (parts[0].trim().toUpperCase() !== token.toUpperCase()) continue
+
+    let clientName, role, expiresAtStr
+    if (parts.length >= 4) {
+      clientName   = parts[1].trim()
+      role         = ROLE_MAP[parts[2].trim().toLowerCase()] || 'ops'
+      expiresAtStr = parts[3].trim()
+    } else {
+      clientName   = parts[1].trim()
+      role         = 'ops'
+      expiresAtStr = parts[2].trim()
+    }
+
+    const expiry = new Date(expiresAtStr)
     if (isNaN(expiry.getTime()) || new Date() > expiry) return { valid: false }
-    return { valid: true, clientName: clientName.trim() }
+    return { valid: true, clientName, role }
   }
   return { valid: false }
 }
@@ -35,7 +52,6 @@ module.exports = async function handler(req, res) {
     return res.status(200).json({ history, clientName: validation.clientName })
   } catch (e) {
     console.error('History fetch error:', e)
-    // Si KV falla, devolver historial vacío — no bloquear el acceso
     return res.status(200).json({ history: [], clientName: validation.clientName })
   }
 }

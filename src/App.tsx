@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAgentStore } from './store/agentStore';
 import { getBrand, BRANDS } from './config/brands';
@@ -11,24 +11,43 @@ import { ConversationMonitor } from './modules/ConversationMonitor';
 import { TestMode } from './modules/TestMode';
 import { BlueprintLibrary } from './modules/BlueprintLibrary';
 import { BlueprintDrawer, BlueprintTriggerButton } from './components/BlueprintDrawer';
+import { AgentLabProvider, useAgentLabDB } from './context/AgentLabContext';
 import type { ModuleView } from './core/types';
 import { BUILD_TAG } from './config/buildTag';
 
 const NAV_ITEMS: { id: ModuleView; label: string; icon: string; description: string }[] = [
-  { id: 'agents', label: 'Agentes', icon: '🤖', description: 'Crear y gestionar agentes' },
-  { id: 'flow', label: 'Flow Builder', icon: '🔀', description: 'Flujos conversacionales' },
-  { id: 'prompts', label: 'Prompts', icon: '📝', description: 'System prompts + DB Vars' },
-  { id: 'whatsapp', label: 'WhatsApp', icon: '💬', description: 'Meta Cloud API' },
-  { id: 'monitor', label: 'Monitor', icon: '📊', description: 'Conversaciones en vivo' },
-  { id: 'test', label: 'Test Mode', icon: '🧪', description: 'Simular agente' },
-  { id: 'blueprints', label: 'Blueprint Library', icon: '🗂', description: 'Gestionar y asignar BPs' },
+  { id: 'agents',     label: 'Agentes',          icon: '🤖', description: 'Crear y gestionar agentes' },
+  { id: 'flow',       label: 'Flow Builder',      icon: '🔀', description: 'Flujos conversacionales' },
+  { id: 'prompts',    label: 'Prompts',            icon: '📝', description: 'System prompts + DB Vars' },
+  { id: 'whatsapp',   label: 'WhatsApp',           icon: '💬', description: 'Meta Cloud API' },
+  { id: 'monitor',    label: 'Monitor',            icon: '📊', description: 'Conversaciones en vivo' },
+  { id: 'test',       label: 'Test Mode',          icon: '🧪', description: 'Simular agente con Claude' },
+  { id: 'blueprints', label: 'Blueprint Library',  icon: '🗂',  description: 'Gestionar y asignar BPs' },
 ];
 
-export function App() {
-  const { activeModule, setActiveModule, agents, sidebarOpen, setSidebarOpen, selectedAgentId } = useAgentStore();
+// ── Inner app — has access to AgentLabProvider context ───────────────────────
+function AppInner() {
+  const { activeModule, setActiveModule, sidebarOpen, setSidebarOpen, selectedAgentId } = useAgentStore();
+  const { agents: dbAgents, flows: dbFlows, isLoading, source } = useAgentLabDB();
   const [resetKey, setResetKey] = useState(0);
   const [bpDrawerOpen, setBpDrawerOpen] = useState(false);
 
+  // Sync Supabase data → agentStore on load
+  useEffect(() => {
+    if (isLoading) return;
+    const store = useAgentStore.getState();
+    // Only seed if store is empty (don't overwrite in-session changes)
+    if (store.agents.length === 0 && dbAgents.length > 0) {
+      dbAgents.forEach(agent => store.addAgent(agent.brandId, agent));
+    }
+    if (store.flows.length === 0 && dbFlows.length > 0) {
+      dbFlows.forEach(flow => {
+        useAgentStore.setState(s => ({ flows: [...s.flows, flow] }));
+      });
+    }
+  }, [isLoading, dbAgents, dbFlows]);
+
+  const { agents } = useAgentStore();
   const selectedAgent = agents.find((a) => a.id === selectedAgentId);
   const brand = selectedAgent ? getBrand(selectedAgent.brandId) : null;
 
@@ -118,12 +137,23 @@ export function App() {
           </div>
         )}
 
-        {/* Stats & Toggle */}
+        {/* Stats, DB indicator & Toggle */}
         <div className="px-3 pb-4 border-t border-white/6 pt-3">
           {sidebarOpen && (
-            <div className="flex justify-between text-xs text-white/30 mb-3">
+            <div className="flex justify-between text-xs text-white/30 mb-2">
               <span>{agents.length} agentes</span>
               <span>{agents.filter((a) => a.status === 'active').length} activos</span>
+            </div>
+          )}
+          {/* DB source indicator */}
+          {sidebarOpen && source && (
+            <div className={`flex items-center gap-1.5 px-2 py-1 rounded mb-2 ${
+              source === 'supabase' ? 'bg-green-500/10' : 'bg-amber-500/10'
+            }`}>
+              <div className={`w-1.5 h-1.5 rounded-full ${source === 'supabase' ? 'bg-green-400' : 'bg-amber-400'}`} />
+              <span className={`text-[9px] font-mono uppercase tracking-wide ${source === 'supabase' ? 'text-green-400' : 'text-amber-400'}`}>
+                {source === 'supabase' ? 'Supabase' : 'Local'}
+              </span>
             </div>
           )}
           <button
@@ -131,12 +161,8 @@ export function App() {
             className="w-full flex items-center justify-center p-2 rounded-lg text-white/30 hover:text-white hover:bg-white/6 transition-all"
           >
             <svg
-              width="16"
-              height="16"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
+              width="16" height="16" viewBox="0 0 24 24"
+              fill="none" stroke="currentColor" strokeWidth="2"
               className={`transition-transform ${sidebarOpen ? '' : 'rotate-180'}`}
             >
               <path d="M15 18l-6-6 6-6" />
@@ -161,12 +187,8 @@ export function App() {
             </div>
           </div>
 
-          {/* Controls */}
           <div className="flex items-center gap-2">
-            {/* Blueprint Drawer Trigger — siempre visible */}
             <BlueprintTriggerButton onClick={() => setBpDrawerOpen(true)} />
-
-            {/* Reset Button */}
             <button
               onClick={handleReset}
               title="Limpiar formulario"
@@ -178,8 +200,6 @@ export function App() {
               </svg>
               Reset
             </button>
-
-            {/* Brand quick-select */}
             <select
               className="bg-[#0d0d14] border border-white/10 rounded-lg px-3 py-1.5 text-xs text-white/70 focus:outline-none focus:border-[#FFAB00]/50 transition-all [&>option]:bg-[#0d0d14] [&>option]:text-white"
               value={selectedAgent?.brandId ?? ''}
@@ -198,8 +218,6 @@ export function App() {
                 );
               })}
             </select>
-
-            {/* Brand dots */}
             <div className="flex gap-1">
               {BRANDS.slice(0, 5).map((b) => {
                 const hasAgents = agents.some((a) => a.brandId === b.id);
@@ -216,7 +234,6 @@ export function App() {
           </div>
         </div>
 
-        {/* Module Content — key={`${activeModule}-${resetKey}`} fuerza remount en reset */}
         <AnimatePresence mode="wait">
           <motion.div
             key={`${activeModule}-${resetKey}`}
@@ -225,21 +242,27 @@ export function App() {
             exit={{ opacity: 0, y: -6 }}
             transition={{ duration: 0.15 }}
           >
-            {activeModule === 'agents' && <AgentBuilder />}
-            {activeModule === 'flow' && <FlowBuilder />}
-            {activeModule === 'prompts' && <PromptManager />}
-            {activeModule === 'whatsapp' && <WhatsAppIntegration />}
-            {activeModule === 'monitor' && <ConversationMonitor />}
-            {activeModule === 'test' && <TestMode />}
+            {activeModule === 'agents'     && <AgentBuilder />}
+            {activeModule === 'flow'       && <FlowBuilder />}
+            {activeModule === 'prompts'    && <PromptManager />}
+            {activeModule === 'whatsapp'   && <WhatsAppIntegration />}
+            {activeModule === 'monitor'    && <ConversationMonitor />}
+            {activeModule === 'test'       && <TestMode />}
             {activeModule === 'blueprints' && <BlueprintLibrary />}
           </motion.div>
         </AnimatePresence>
       </main>
 
-      {/* Blueprint Drawer — global, accesible desde cualquier módulo */}
       <BlueprintDrawer open={bpDrawerOpen} onClose={() => setBpDrawerOpen(false)} />
     </div>
   );
 }
 
-export default App;
+// ── Root — AgentLabProvider wraps everything ─────────────────────────────────
+export default function App() {
+  return (
+    <AgentLabProvider>
+      <AppInner />
+    </AgentLabProvider>
+  );
+}

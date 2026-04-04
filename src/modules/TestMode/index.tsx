@@ -2,16 +2,34 @@ import { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAgentStore } from '../../store/agentStore';
 import { getBrand } from '../../config/brands';
-import { generateAgentResponse } from '../../services/geminiService';
 import { resolvePromptVariables } from '../../services/agentEngine';
 import {
   Button, Card, Input, SectionHeader, Badge, Divider,
 } from '../../ui/components';
 import { CHANNEL_LABELS, STATUS_LABELS } from '../../config/presets';
 
+// ── Claude server-side call — replaces geminiService.ts ──────────────────────
+async function callTestChat(params: {
+  systemPrompt: string;
+  agentName: string;
+  messages: Array<{ role: string; content: string }>;
+}): Promise<string> {
+  const res = await fetch('/api/test-chat', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
+    throw new Error(err.error || `API error ${res.status}`);
+  }
+  const data = await res.json();
+  return data.reply ?? '';
+}
+
 export function TestMode() {
   const {
-    agents, testSession, selectedAgentId, geminiApiKey,
+    agents, testSession, selectedAgentId,
     startTestSession, endTestSession, addTestMessage, setTestTyping,
     dbVariables,
   } = useAgentStore();
@@ -19,6 +37,7 @@ export function TestMode() {
   const agent = agents.find((a) => a.id === selectedAgentId) ?? agents[0] ?? null;
   const [input, setInput] = useState('');
   const [selectedTestAgent, setSelectedTestAgent] = useState<string>(agent?.id ?? '');
+  const [error, setError] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -43,6 +62,7 @@ export function TestMode() {
   const handleStart = () => {
     if (!selectedTestAgent) return;
     startTestSession(selectedTestAgent);
+    setError(null);
     setTimeout(() => inputRef.current?.focus(), 100);
   };
 
@@ -52,29 +72,31 @@ export function TestMode() {
 
     const userMsg = trimmed;
     setInput('');
+    setError(null);
     addTestMessage('user', userMsg);
     setTestTyping(true);
 
     try {
-      const agentWithResolvedPrompt = {
-        ...resolvedAgent,
-        systemPrompt: buildResolvedPrompt(resolvedAgent.id),
-      };
+      const systemPrompt = buildResolvedPrompt(resolvedAgent.id) || resolvedAgent.systemPrompt;
 
-      await new Promise((r) => setTimeout(r, 600 + Math.random() * 800));
+      // Convert testSession messages to API format
+      const history = testSession.messages
+        .filter(m => m.role !== 'agent' || !m.content.includes('listo para ser probado'))
+        .slice(-10)
+        .map(m => ({ role: m.role === 'user' ? 'user' : 'assistant', content: m.content }));
 
-      const response = await generateAgentResponse(
-        agentWithResolvedPrompt,
-        testSession.messages,
-        userMsg,
-        geminiApiKey
-      );
+      const response = await callTestChat({
+        systemPrompt,
+        agentName: resolvedAgent.name,
+        messages: [...history, { role: 'user', content: userMsg }],
+      });
 
       setTestTyping(false);
       addTestMessage('agent', response);
-    } catch {
+    } catch (err: any) {
       setTestTyping(false);
-      addTestMessage('agent', 'Error al procesar el mensaje. Por favor intenta de nuevo.');
+      setError(err.message || 'Error al procesar el mensaje');
+      addTestMessage('agent', '⚠️ Error al conectar con el modelo. Intenta de nuevo.');
     }
   };
 
@@ -110,7 +132,7 @@ export function TestMode() {
                   return (
                     <button
                       key={a.id}
-                      onClick={() => { setSelectedTestAgent(a.id); endTestSession(); }}
+                      onClick={() => { setSelectedTestAgent(a.id); endTestSession(); setError(null); }}
                       className={`w-full text-left flex items-center gap-2.5 p-2.5 rounded-xl border transition-all ${
                         selectedTestAgent === a.id
                           ? 'bg-[#FFAB00]/10 border-[#FFAB00]/40'
@@ -141,11 +163,14 @@ export function TestMode() {
               </div>
               <div className="flex gap-2 flex-wrap mb-3">
                 <Badge variant="default">{CHANNEL_LABELS[resolvedAgent.channel]}</Badge>
-                <Badge
-                  variant={resolvedAgent.status === 'active' ? 'success' : 'warning'}
-                >
+                <Badge variant={resolvedAgent.status === 'active' ? 'success' : 'warning'}>
                   {STATUS_LABELS[resolvedAgent.status]}
                 </Badge>
+              </div>
+              {/* Engine badge — Claude */}
+              <div className="flex items-center gap-1.5 px-2 py-1 rounded bg-emerald-500/10 border border-emerald-500/20 mb-3">
+                <div className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                <span className="text-[10px] font-mono text-emerald-400 uppercase tracking-wide">Claude Sonnet 4 · Server-side</span>
               </div>
               {resolvedAgent.systemPrompt ? (
                 <div>
@@ -159,20 +184,6 @@ export function TestMode() {
               )}
             </Card>
           )}
-
-          {/* Gemini API Key */}
-          <Card className="p-4">
-            <h3 className="text-sm font-semibold text-white mb-1">Gemini API Key</h3>
-            <p className="text-xs text-white/40 mb-3">
-              Sin clave usa respuestas de simulación básica.
-            </p>
-            <Input
-              placeholder="AIzaSy..."
-              type="password"
-              value={geminiApiKey}
-              onChange={(e) => useAgentStore.getState().setGeminiApiKey(e.target.value)}
-            />
-          </Card>
 
           {/* Quick prompts */}
           <Card className="p-4">
@@ -203,7 +214,8 @@ export function TestMode() {
         <div className="xl:col-span-2">
           <Card className="flex flex-col overflow-hidden" style={{ height: '75vh' }}>
             {/* Chat Header */}
-            <div className="p-4 border-b border-white/8 flex items-center justify-between flex-shrink-0"
+            <div
+              className="p-4 border-b border-white/8 flex items-center justify-between flex-shrink-0"
               style={brand ? { borderBottomColor: `${brand.color}20` } : undefined}
             >
               <div className="flex items-center gap-3">
@@ -219,7 +231,7 @@ export function TestMode() {
                       <h4 className="font-semibold text-white text-sm">{resolvedAgent?.name ?? 'Agente'}</h4>
                       <div className="flex items-center gap-1.5">
                         <span className="w-1.5 h-1.5 rounded-full bg-green-400" />
-                        <span className="text-xs text-white/40">En prueba</span>
+                        <span className="text-xs text-white/40">En prueba · Claude</span>
                       </div>
                     </div>
                   </>
@@ -260,7 +272,6 @@ export function TestMode() {
                 </div>
               ) : (
                 <>
-                  {/* Session started banner */}
                   <div className="flex items-center gap-2 justify-center">
                     <Divider className="flex-1" />
                     <span className="text-xs text-white/30 px-2">Sesión de prueba iniciada</span>
@@ -350,6 +361,13 @@ export function TestMode() {
                       </motion.div>
                     )}
                   </AnimatePresence>
+
+                  {/* Error banner */}
+                  {error && (
+                    <div className="flex items-center gap-2 px-3 py-2 bg-red-500/10 border border-red-500/20 rounded-lg text-xs text-red-400">
+                      ⚠️ {error}
+                    </div>
+                  )}
 
                   <div ref={messagesEndRef} />
                 </>

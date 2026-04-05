@@ -3,6 +3,7 @@
 // Estado en memoria para velocidad de UI, IndexedDB como fuente persistente.
 
 import { create } from 'zustand';
+import { loadAllBlueprints } from '../services/blueprintSupabaseLoader';
 import { nanoid } from 'nanoid';
 import {
   dbGetAll,
@@ -102,14 +103,64 @@ export const useBlueprintStore = create<BlueprintState & BlueprintActions>((set,
   searchQuery: '',
 
   // ─── Init ──────────────────────────────────────────────────────────────────
-  hydrate: async () => {
+    hydrate: async () => {
     set({ loading: true });
     try {
+      // Try Supabase first — source of truth for production data
+      const { persons, locations, products } = await loadAllBlueprints();
+      const supabaseBlueprints: BlueprintEntry[] = [
+        ...persons.map(p => ({
+          id: p.id ?? `sb_person_${p.brandId}_${Math.random().toString(36).slice(2)}`,
+          type: 'BP_PERSON' as BPType,
+          name: p.displayName ?? (p as any).name ?? 'Person',
+          brandId: p.brandId ?? 'unknown',
+          version: (p as any).version ?? '1.0',
+          data: p as Record<string, unknown>,
+          createdAt: Date.now(),
+          updatedAt: Date.now(),
+          slots: {} as SlotMap,
+        })),
+        ...locations.map(l => ({
+          id: (l as any).id ?? `sb_location_${(l as any).brandId}_${Math.random().toString(36).slice(2)}`,
+          type: 'BP_LOCATION' as BPType,
+          name: (l as any).location_name ?? (l as any).name ?? 'Location',
+          brandId: (l as any).brandId ?? 'unknown',
+          version: (l as any).version ?? '1.0',
+          data: l as Record<string, unknown>,
+          createdAt: Date.now(),
+          updatedAt: Date.now(),
+          slots: {} as SlotMap,
+        })),
+        ...products.map(p => ({
+          id: (p as any).id ?? `sb_product_${(p as any).brandId}_${Math.random().toString(36).slice(2)}`,
+          type: 'BP_PRODUCT' as BPType,
+          name: (p as any).display_name ?? (p as any).product_name ?? (p as any).name ?? 'Product',
+          brandId: (p as any).brandId ?? (p as any).brand_id ?? 'unknown',
+          version: (p as any).version ?? '1.0',
+          data: p as Record<string, unknown>,
+          createdAt: Date.now(),
+          updatedAt: Date.now(),
+          slots: {} as SlotMap,
+        })),
+      ];
+
+      if (supabaseBlueprints.length > 0) {
+        set({ blueprints: supabaseBlueprints, loading: false });
+        return;
+      }
+
+      // Fallback: IndexedDB for locally created blueprints
       const all = await dbGetAll();
       set({ blueprints: all, loading: false });
-    } catch (err) {
-      console.error('[BlueprintStore] hydrate error:', err);
-      set({ loading: false });
+    } catch (e) {
+      console.warn('[blueprintStore] Supabase hydrate failed, falling back to IndexedDB:', e);
+      try {
+        const all = await dbGetAll();
+        set({ blueprints: all, loading: false });
+      } catch (e2) {
+        console.error('[blueprintStore] IndexedDB fallback error:', e2);
+        set({ loading: false });
+      }
     }
   },
 

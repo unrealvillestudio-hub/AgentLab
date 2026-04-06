@@ -41,19 +41,19 @@ module.exports = async function handler(req, res) {
       // Si ya tiene raw_log, no sobreescribir
       const existingRaw = await kv.get(`raw_log:${key}`)
       if (existingRaw) {
-        const parsed = JSON.parse(existingRaw)
+        const parsed = Array.isArray(existingRaw) ? existingRaw : JSON.parse(existingRaw)
         results.push({ tokenKey: key, clientName, status: 'already_exists', exchanges: parsed.length })
         continue
       }
 
-      // Leer historial de chat
+      // Leer historial de chat — kv.get devuelve objeto ya parseado
       const chatRaw = await kv.get(`chat:${key}`)
       if (!chatRaw) {
         results.push({ tokenKey: key, clientName, status: 'no_history' })
         continue
       }
 
-      const messages = JSON.parse(chatRaw)
+      const messages = Array.isArray(chatRaw) ? chatRaw : JSON.parse(chatRaw)
       const entries = []
       const backfillTs = new Date().toISOString()
 
@@ -82,12 +82,12 @@ module.exports = async function handler(req, res) {
         continue
       }
 
-      // Guardar raw_log
-      await kv.set(`raw_log:${key}`, JSON.stringify(entries), { ex: KV_TTL_SECONDS })
+      // Guardar raw_log — kv.set acepta objeto directamente
+      await kv.set(`raw_log:${key}`, entries, { ex: KV_TTL_SECONDS })
 
       // Actualizar registry
       const regRaw = await kv.get(LOG_REGISTRY_KEY)
-      const registry = regRaw ? JSON.parse(regRaw) : []
+      const registry = Array.isArray(regRaw) ? regRaw : (regRaw ? JSON.parse(regRaw) : [])
       if (!registry.find(r => r.tokenKey === key)) {
         registry.push({
           tokenKey:  key,
@@ -96,7 +96,7 @@ module.exports = async function handler(req, res) {
           firstSeen: backfillTs,
           _backfilled: true
         })
-        await kv.set(LOG_REGISTRY_KEY, JSON.stringify(registry), { ex: KV_TTL_SECONDS })
+        await kv.set(LOG_REGISTRY_KEY, registry, { ex: KV_TTL_SECONDS })
       }
 
       results.push({ tokenKey: key, clientName, status: 'migrated', exchanges: entries.length })

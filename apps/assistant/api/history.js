@@ -48,7 +48,7 @@ module.exports = async function handler(req, res) {
 
   try {
     const stored = await kv.get(`chat:${token.toUpperCase()}`)
-    const history = stored ? JSON.parse(stored) : []
+    const history = stored ? (Array.isArray(stored) ? stored : JSON.parse(stored)) : []
     return res.status(200).json({ history, clientName: validation.clientName })
   } catch (e) {
     console.error('History fetch error:', e)

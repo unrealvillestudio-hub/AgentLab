@@ -4,7 +4,6 @@ export type BrandId =
   | 'patricia-personal'
   | 'patricia-comunidad'
   | 'vizos-salon'
-  | 'diamond-details'
   | 'd7-herbal'
   | 'vivose-mask'
   | 'vizos-cosmetics'

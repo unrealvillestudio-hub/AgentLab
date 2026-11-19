@@ -32,13 +32,6 @@ export const BRANDS: Brand[] = [
     emoji: '💇',
   },
   {
-    id: 'DiamondDetails',
-    name: 'Diamond Details',
-    color: '#3B82F6',
-    description: 'Detailing automotriz de lujo',
-    emoji: '💎',
-  },
-  {
     id: 'D7Herbal',
     name: 'D7 Herbal',
     color: '#22C55E',

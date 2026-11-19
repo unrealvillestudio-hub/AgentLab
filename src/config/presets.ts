@@ -155,10 +155,6 @@ export const DEFAULT_DB_VARIABLES: Omit<DBVariable, 'id'>[] = [
   { key: 'BRAND_VALUE_PROP', value: 'Productos naturales certificados para una vida más saludable', brandId: 'd7-herbal', category: 'brand', description: 'Propuesta de valor' },
   { key: 'PRODUCT_LIST', value: 'Gel Bebible D7 (Asaí + Espirulina + Fruto del Monje)', brandId: 'd7-herbal', category: 'product', description: 'Lista de productos' },
   { key: 'FAQ_CONTENT', value: '¿Para qué sirve el Gel Bebible D7? → Energía, antioxidantes y bienestar general.', brandId: 'd7-herbal', category: 'product', description: 'Preguntas frecuentes' },
-  { key: 'BRAND_NAME', value: 'Diamond Details', brandId: 'diamond-details', category: 'brand', description: 'Nombre de la marca' },
-  { key: 'SERVICE_LIST', value: 'Full Detail, Ceramic Coating, Paint Correction, Interior Deep Clean', brandId: 'diamond-details', category: 'product', description: 'Servicios' },
-  { key: 'BUSINESS_HOURS', value: 'Lunes a Sábado 8am-6pm EST', brandId: 'diamond-details', category: 'brand', description: 'Horarios' },
-  { key: 'BRAND_LOCATION', value: 'Miami, FL', brandId: 'diamond-details', category: 'brand', description: 'Ubicación' },
   { key: 'BRAND_NAME', value: 'Vizos Salon', brandId: 'vizos-salon', category: 'brand', description: 'Nombre de la marca' },
   { key: 'SERVICE_LIST', value: 'Corte, Color, Tratamientos, Extensiones, Maquillaje', brandId: 'vizos-salon', category: 'product', description: 'Servicios del salón' },
 ];
